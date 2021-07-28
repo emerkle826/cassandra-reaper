@@ -77,6 +77,7 @@ public final class RepairScheduleMapper implements ResultSetMapper<RepairSchedul
         .segmentCountPerNode(rs.getInt("segment_count_per_node"))
         .owner(rs.getString("owner"))
         .pauseTime(RepairRunMapper.getDateTimeOrNull(rs, "pause_time"))
+        .percentRepairThreshold(rs.getInt("percent_repair_threshold"))
         .build(UuidUtil.fromSequenceId(rs.getLong("id")));
   }
 }

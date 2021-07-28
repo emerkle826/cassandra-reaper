@@ -91,6 +91,9 @@ public final class RepairScheduleStatus {
   @JsonProperty("repair_unit_id")
   private UUID repairUnitId;
 
+  @JsonProperty("repair_percent_threshold")
+  private int repairPercentThreshold;
+
   /**
    * Default public constructor Required for Jackson JSON parsing.
    */
@@ -117,7 +120,8 @@ public final class RepairScheduleStatus {
       Collection<String> blacklistedTables,
       int segmentCountPerNode,
       int repairThreadCount,
-      UUID repairUnitId) {
+      UUID repairUnitId,
+      int repairPercentThreshold) {
 
     this.id = id;
     this.owner = owner;
@@ -139,6 +143,7 @@ public final class RepairScheduleStatus {
     this.segmentCountPerNode = segmentCountPerNode;
     this.repairThreadCount = repairThreadCount;
     this.repairUnitId = repairUnitId;
+    this.repairPercentThreshold = repairPercentThreshold;
 
   }
 
@@ -163,7 +168,8 @@ public final class RepairScheduleStatus {
         repairUnit.getBlacklistedTables(),
         repairSchedule.getSegmentCountPerNode(),
         repairUnit.getRepairThreadCount(),
-        repairUnit.getId());
+        repairUnit.getId(),
+        repairSchedule.getRepairPercentThreshold());
   }
 
   public UUID getId() {
@@ -368,5 +374,13 @@ public final class RepairScheduleStatus {
 
   public void setRepairUnitId(UUID repairUnitId) {
     this.repairUnitId = repairUnitId;
+  }
+
+  public int getRepairPercentThreshold() {
+    return repairPercentThreshold;
+  }
+
+  public void setRepairPercentThreshold(int repairPercentThreshold) {
+    this.repairPercentThreshold = repairPercentThreshold;
   }
 }

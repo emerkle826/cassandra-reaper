@@ -468,8 +468,9 @@ public final class CassandraStorage implements IStorage, IDistributedStorage {
                 "INSERT INTO repair_schedule_v1(id, repair_unit_id, state,"
                     + "days_between, next_activation, run_history, "
                     + "segment_count, repair_parallelism, intensity, "
-                    + "creation_time, owner, pause_time, segment_count_per_node) "
-                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                    + "creation_time, owner, pause_time, segment_count_per_node, "
+                    + "repair_percent_threshold)"
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .setConsistencyLevel(ConsistencyLevel.QUORUM);
     getRepairSchedulePrepStmt
         = session
@@ -1371,6 +1372,7 @@ public final class CassandraStorage implements IStorage, IDistributedStorage {
         .segmentCountPerNode(repairScheduleRow.getInt("segment_count_per_node"))
         .owner(repairScheduleRow.getString("owner"))
         .pauseTime(new DateTime(repairScheduleRow.getTimestamp("pause_time")))
+        .percentRepairThreshold(repairScheduleRow.getInt("repair_percent_threshold"))
         .build(repairScheduleRow.getUUID("id"));
   }
 
@@ -1458,7 +1460,8 @@ public final class CassandraStorage implements IStorage, IDistributedStorage {
                 newRepairSchedule.getCreationTime(),
                 newRepairSchedule.getOwner(),
                 newRepairSchedule.getPauseTime(),
-                newRepairSchedule.getSegmentCountPerNode())));
+                newRepairSchedule.getSegmentCountPerNode(),
+                newRepairSchedule.getRepairPercentThreshold())));
 
     futures.add(
         session.executeAsync(

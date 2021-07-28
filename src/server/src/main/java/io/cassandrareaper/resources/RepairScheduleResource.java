@@ -103,7 +103,8 @@ public final class RepairScheduleResource {
       @QueryParam("datacenters") Optional<String> datacentersToRepairParam,
       @QueryParam("blacklistedTables") Optional<String> blacklistedTableNamesParam,
       @QueryParam("repairThreadCount") Optional<Integer> repairThreadCountParam,
-      @QueryParam("force") Optional<String> forceParam) {
+      @QueryParam("force") Optional<String> forceParam,
+      @QueryParam("repairPercentThreshold") Optional<Integer> repairPercentThreshold) {
 
     try {
       Response possibleFailResponse = RepairRunResource.checkRequestForAddRepair(
@@ -140,9 +141,15 @@ public final class RepairScheduleResource {
         return Response.status(Response.Status.BAD_REQUEST).entity("invalid schedule_trigger_time").build();
       }
 
-      if (!scheduleDaysBetween.isPresent()) {
+      if (!scheduleDaysBetween.isPresent() && !repairPercentThreshold.isPresent()) {
         return Response.status(Response.Status.BAD_REQUEST)
-            .entity("missing required parameter: scheduleDaysBetween")
+            .entity("missing required parameter: scheduleDaysBetween OR repairPercentThreshold")
+            .build();
+      }
+
+      if (scheduleDaysBetween.isPresent() && repairPercentThreshold.isPresent()) {
+        return Response.status(Response.Status.BAD_REQUEST)
+            .entity("mutually exclusive parameters: provide scheduleDaysBetween OR repairPercentThreshold not both")
             .build();
       }
 
@@ -215,7 +222,7 @@ public final class RepairScheduleResource {
       return addRepairSchedule(
           cluster,
           unitBuilder,
-          getDaysBetween(scheduleDaysBetween),
+          scheduleDaysBetween,
           owner.get(),
           parallelism,
           uriInfo,
@@ -223,7 +230,8 @@ public final class RepairScheduleResource {
           nextActivation,
           getSegmentCount(segmentCountPerNode),
           getIntensity(intensityStr),
-          force);
+          force,
+          repairPercentThreshold);
 
     } catch (ReaperException e) {
       LOG.error(e.getMessage(), e);
@@ -234,7 +242,7 @@ public final class RepairScheduleResource {
   private Response addRepairSchedule(
       Cluster cluster,
       RepairUnit.Builder unitBuilder,
-      int days,
+      Optional<Integer> optionalDays,
       String owner,
       RepairParallelism parallel,
       UriInfo uriInfo,
@@ -242,7 +250,8 @@ public final class RepairScheduleResource {
       DateTime next,
       int segments,
       Double intensity,
-      boolean force) {
+      boolean force,
+      Optional<Integer> optionalRepairPercentThreshold) {
 
     Optional<RepairSchedule> conflictingRepairSchedule
         = repairScheduleService.identicalRepairUnit(cluster, unitBuilder);
@@ -256,13 +265,21 @@ public final class RepairScheduleResource {
     if (conflictingRepairSchedule.isPresent()) {
       RepairSchedule existingSchedule = conflictingRepairSchedule.get();
 
-      if (existingSchedule.getDaysBetween() == days
+      // Days between and repair percent threshold are mutually exclusive
+      // Exactly one of them should be present.
+
+      if (optionalDays.isPresent()
+          && existingSchedule.getDaysBetween() == getDaysBetween(optionalDays)
+          && existingSchedule.getOwner().equals(owner)
+          && existingSchedule.getRepairParallelism() == parallel) {
+
+        return Response.noContent().location(buildRepairScheduleUri(uriInfo, existingSchedule)).build();
+      } else if (existingSchedule.getRepairPercentThreshold() == optionalRepairPercentThreshold.get()
           && existingSchedule.getOwner().equals(owner)
           && existingSchedule.getRepairParallelism() == parallel) {
 
         return Response.noContent().location(buildRepairScheduleUri(uriInfo, existingSchedule)).build();
       }
-
       if (!force) {
         String msg = String.format(
             "A repair schedule already exists for cluster \"%s\", keyspace \"%s\", and column families: %s",
@@ -283,8 +300,13 @@ public final class RepairScheduleResource {
     Preconditions
         .checkState(unit.getIncrementalRepair() == incremental, "%s!=%s", unit.getIncrementalRepair(), incremental);
 
-    RepairSchedule newRepairSchedule = repairScheduleService
-        .storeNewRepairSchedule(cluster, unit, days, next, owner, segments, parallel, intensity, force);
+    RepairSchedule newRepairSchedule = optionalDays.isPresent()
+        ? repairScheduleService
+            .storeNewRepairSchedule(
+                cluster, unit, getDaysBetween(optionalDays), next, owner, segments, parallel, intensity, force)
+        : repairScheduleService
+            .storeNewRepairScheduleWithPercentThreshold(
+                cluster, unit, optionalRepairPercentThreshold.get(), next, owner, segments, parallel, intensity, force);
 
     return Response.created(buildRepairScheduleUri(uriInfo, newRepairSchedule)).build();
   }

@@ -111,7 +111,46 @@ public final class RepairScheduleService {
         .repairParallelism(repairParallelism)
         .intensity(intensity)
         .segmentCountPerNode(segmentCountPerNode)
-        .owner(owner);
+        .owner(owner)
+        .percentRepairThreshold(0);
+
+    return context.storage.addRepairSchedule(scheduleBuilder);
+  }
+
+  /**
+   * Instantiates a RepairSchedule and stores it in the storage backend.
+   *
+   *<p>
+   * Expected to have called first  conflictingRepairSchedule(Cluster, RepairUnit)
+   *
+   * @return the new, just stored RepairSchedule instance
+   */
+  public RepairSchedule storeNewRepairScheduleWithPercentThreshold(
+      Cluster cluster,
+      RepairUnit repairUnit,
+      int repairPercentThreshold,
+      DateTime nextActivation,
+      String owner,
+      int segmentCountPerNode,
+      RepairParallelism repairParallelism,
+      Double intensity,
+      boolean force) {
+
+    Preconditions.checkArgument(
+        force || !conflictingRepairSchedule(cluster, repairUnit.with()).isPresent(),
+        "A repair schedule already exists for cluster \"%s\", keyspace \"%s\", and column families: %s",
+        cluster.getName(),
+        repairUnit.getKeyspaceName(),
+        repairUnit.getColumnFamilies());
+
+    RepairSchedule.Builder scheduleBuilder = RepairSchedule.builder(repairUnit.getId())
+        .percentRepairThreshold(repairPercentThreshold)
+        .nextActivation(nextActivation)
+        .repairParallelism(repairParallelism)
+        .intensity(intensity)
+        .segmentCountPerNode(segmentCountPerNode)
+        .owner(owner)
+        .daysBetween(0);
 
     return context.storage.addRepairSchedule(scheduleBuilder);
   }

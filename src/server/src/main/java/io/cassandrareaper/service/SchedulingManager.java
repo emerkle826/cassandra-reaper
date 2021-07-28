@@ -128,6 +128,7 @@ public final class SchedulingManager extends TimerTask {
    * @return boolean indicating whether a new RepairRun instance was created and started.
    */
   private boolean manageSchedule(RepairSchedule schdle) {
+    LOG.info("Managing Repair Schedule\n{}", schdle.logString());
     switch (schdle.getState()) {
       case ACTIVE:
         if (schdle.getNextActivation().isBeforeNow()) {

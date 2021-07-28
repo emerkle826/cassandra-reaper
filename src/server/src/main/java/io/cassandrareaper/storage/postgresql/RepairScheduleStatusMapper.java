@@ -67,7 +67,8 @@ public final class RepairScheduleStatusMapper implements ResultSetMapper<RepairS
                 : getStringArray(rs.getArray("blacklisted_tables").getArray())),
         rs.getInt("segment_count_per_node"),
         rs.getInt("repair_thread_count"),
-        UuidUtil.fromSequenceId(rs.getLong("repair_unit_id")));
+        UuidUtil.fromSequenceId(rs.getLong("repair_unit_id")),
+        rs.getInt("repair_percent_threshold"));
   }
 
   private String[] getStringArray(Object array) {

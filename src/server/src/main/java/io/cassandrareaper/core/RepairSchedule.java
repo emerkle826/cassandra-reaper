@@ -44,6 +44,7 @@ public final class RepairSchedule {
   private final String owner;
   private final DateTime pauseTime;
   private final int segmentCountPerNode;
+  private final int percentRepairThreshold;
 
   private RepairSchedule(Builder builder, UUID id) {
     this.id = id;
@@ -59,6 +60,7 @@ public final class RepairSchedule {
     this.owner = builder.owner;
     this.pauseTime = builder.pauseTime;
     this.segmentCountPerNode = builder.segmentCountPerNode;
+    this.percentRepairThreshold = builder.percentRepairThreshold;
   }
 
   public static Builder builder(UUID repairUnitId) {
@@ -129,6 +131,10 @@ public final class RepairSchedule {
     return pauseTime;
   }
 
+  public int getRepairPercentThreshold() {
+    return this.percentRepairThreshold;
+  }
+
   public Builder with() {
     return new Builder(this);
   }
@@ -136,6 +142,24 @@ public final class RepairSchedule {
   @Override
   public String toString() {
     return String.format("%s[%s]", getClass().getSimpleName(), id.toString());
+  }
+
+  public String logString() {
+    StringBuilder buf = new StringBuilder();
+    return buf
+        .append("id: ").append(repairUnitId)
+        .append(", state: ").append(state)
+        .append(", days between: ").append(daysBetween)
+        .append(", next activation: ").append(nextActivation)
+        .append(", run history: ").append(runHistory)
+        .append(", repair parallelism: ").append(repairParallelism)
+        .append(", intensity: ").append(intensity)
+        .append(", creation time: ").append(creationTime)
+        .append(", owner: ").append(owner)
+        .append(", pause time: ").append(pauseTime)
+        .append(", segment count per node: ").append(segmentCountPerNode)
+        .append(", percent repair threshold: ").append(percentRepairThreshold)
+        .toString();
   }
 
   public enum State {
@@ -158,7 +182,7 @@ public final class RepairSchedule {
     private String owner = "";
     private DateTime pauseTime;
     private Integer segmentCountPerNode;
-    private boolean majorCompaction = false;
+    private Integer percentRepairThreshold;
 
     private Builder(UUID repairUnitId) {
       this.repairUnitId = repairUnitId;
@@ -178,6 +202,7 @@ public final class RepairSchedule {
       pauseTime = original.pauseTime;
       intensity = original.intensity;
       segmentCountPerNode = original.segmentCountPerNode;
+      percentRepairThreshold = original.percentRepairThreshold;
     }
 
     public Builder state(State state) {
@@ -235,8 +260,15 @@ public final class RepairSchedule {
       return this;
     }
 
+    public Builder percentRepairThreshold(int percentRepairThreshold) {
+      this.percentRepairThreshold = percentRepairThreshold;
+      return this;
+    }
+
     public RepairSchedule build(UUID id) {
-      Preconditions.checkState(null != daysBetween, "daysBetween(..) must be called before build(..)");
+      Preconditions.checkState(
+          null != daysBetween || null != percentRepairThreshold,
+          "daysBetween(..) OR percentRepairThreshold(..) must be called before build(..)");
       Preconditions.checkState(null != nextActivation, "nextActivation(..) must be called before build(..)");
       Preconditions.checkState(null != repairParallelism, "repairParallelism(..) must be called before build(..)");
       Preconditions.checkState(null != intensity, "intensity(..) must be called before build(..)");
