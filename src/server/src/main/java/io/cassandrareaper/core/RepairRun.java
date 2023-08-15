@@ -48,6 +48,7 @@ public final class RepairRun implements Comparable<RepairRun> {
   private final int segmentCount;
   private final RepairParallelism repairParallelism;
   private final Set<String> tables;
+  private final boolean adaptiveSchedule;
 
   private RepairRun(Builder builder, UUID id) {
     this.id = id;
@@ -65,6 +66,7 @@ public final class RepairRun implements Comparable<RepairRun> {
     this.segmentCount = builder.segmentCount;
     this.repairParallelism = builder.repairParallelism;
     this.tables = builder.tables;
+    this.adaptiveSchedule = builder.adaptiveSchedule;
   }
 
   public static Builder builder(String clusterName, UUID repairUnitId) {
@@ -131,6 +133,10 @@ public final class RepairRun implements Comparable<RepairRun> {
     return tables;
   }
 
+  public Boolean getAdaptiveSchedule() {
+    return adaptiveSchedule;
+  }
+
   public Builder with() {
     return new Builder(this);
   }
@@ -174,12 +180,15 @@ public final class RepairRun implements Comparable<RepairRun> {
     return String.format("%s[%s] for %s", getClass().getSimpleName(), id.toString(), clusterName);
   }
 
+  // The values in this enum are declared in order of "interestingness",
+  // this is used to order RepairRuns in the UI so that e.g. RUNNING runs come first.
   public enum RunState {
-    NOT_STARTED,
     RUNNING,
+    PAUSED,
+    NOT_STARTED,
+
     ERROR,
     DONE,
-    PAUSED,
     ABORTED,
     DELETED;
 
@@ -208,6 +217,8 @@ public final class RepairRun implements Comparable<RepairRun> {
     private Integer segmentCount;
     private RepairParallelism repairParallelism;
     private Set<String> tables;
+    private boolean adaptiveSchedule;
+
 
     private Builder(String clusterName, UUID repairUnitId) {
       this.clusterName = clusterName;
@@ -229,6 +240,7 @@ public final class RepairRun implements Comparable<RepairRun> {
       segmentCount = original.segmentCount;
       repairParallelism = original.repairParallelism;
       tables = original.tables;
+      adaptiveSchedule = original.adaptiveSchedule;
     }
 
     public Builder runState(RunState runState) {
@@ -294,6 +306,11 @@ public final class RepairRun implements Comparable<RepairRun> {
       return this;
     }
 
+    public Builder adaptiveSchedule(boolean adaptive) {
+      this.adaptiveSchedule = adaptive;
+      return this;
+    }
+
     public RepairRun build(UUID id) {
       Preconditions.checkState(null != repairParallelism, "repairParallelism(..) must be called before build(..)");
       Preconditions.checkState(null != intensity, "intensity(..) must be called before build(..)");
@@ -327,4 +344,5 @@ public final class RepairRun implements Comparable<RepairRun> {
       return new RepairRun(this, id);
     }
   }
+
 }

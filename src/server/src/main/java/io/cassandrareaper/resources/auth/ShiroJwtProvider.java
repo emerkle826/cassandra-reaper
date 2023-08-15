@@ -18,19 +18,19 @@
 package io.cassandrareaper.resources.auth;
 
 import io.cassandrareaper.AppContext;
-import io.cassandrareaper.storage.CassandraStorage;
-import io.cassandrareaper.storage.PostgresStorage;
+import io.cassandrareaper.resources.RequestUtils;
+import io.cassandrareaper.storage.cassandra.CassandraStorageFacade;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
-
+import java.util.Base64;
 import javax.crypto.spec.SecretKeySpec;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
-import javax.xml.bind.DatatypeConverter;
 
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -51,20 +51,33 @@ public final class ShiroJwtProvider {
   }
 
   String getJwt(HttpServletRequest request) throws IOException {
-    return Jwts.builder().setSubject(request.getUserPrincipal().getName()).signWith(SIG_ALG, SIGNING_KEY).compact();
+    if (RequestUtils.getSessionTimeout().isNegative()) {
+      // No session timeout set, so return a JWT with no expiration time
+      return Jwts.builder().setSubject(request.getUserPrincipal().getName()).signWith(SIG_ALG, SIGNING_KEY).compact();
+    } else {
+      // Return a JWT with an expiration time based on the session timeout
+      return Jwts.builder()
+          .setSubject(request.getUserPrincipal().getName())
+          .setExpiration(new java.util.Date(System.currentTimeMillis() + RequestUtils.getSessionTimeout().toMillis()))
+          .signWith(SIG_ALG, SIGNING_KEY)
+          .compact();
+    }
   }
 
   private static Key getSigningKey(AppContext cxt) {
+    byte[] key;
     String txt = System.getenv("JWT_SECRET");
     if (null == txt) {
-      if (cxt.storage instanceof CassandraStorage) {
+      if (cxt.storage instanceof CassandraStorageFacade) {
         txt = cxt.config.getCassandraFactory().getClusterName();
-      } else if (cxt.storage instanceof PostgresStorage) {
-        txt = cxt.config.getPostgresDataSourceFactory().getUrl();
       } else {
         txt = AppContext.REAPER_INSTANCE_ADDRESS;
       }
+      key = txt.getBytes(StandardCharsets.UTF_8);
+    } else {
+      key = Base64.getDecoder().decode(txt);
     }
-    return new SecretKeySpec(DatatypeConverter.parseBase64Binary(txt), SIG_ALG.getJcaName());
+
+    return new SecretKeySpec(key, SIG_ALG.getJcaName());
   }
 }

@@ -231,7 +231,7 @@ Returns OK if all goes well NOT_MODIFIED if new state is the same as the old one
   
 ## Snapshot Resource
 
-* **GET /snapshot/{clusterName}/{host}**
+* **GET /snapshot/cluster/{clusterName}/{host}**
   * Expected query parameters: *None*
   * Lists snapshots for the given host in the given cluster.
   
@@ -241,17 +241,17 @@ Returns OK if all goes well NOT_MODIFIED if new state is the same as the old one
   * Lists all snapshots for the the given cluster.
   
   
-* **DELETE /snapshot/{clusterName}/{host}/{snapshotName}**
+* **DELETE /snapshot/cluster/{clusterName}/{host}/{snapshotName}**
   * Expected query parameters: *None*
   * Deletes a specific snapshot on a given node.
   
   
-* **DELETE /snapshot/{clusterName}/{snapshotName}**
+* **DELETE /snapshot/cluster/{clusterName}/{snapshotName}**
   * Expected query parameters: *None*
   * Deletes a specific snapshot on all nodes in a given cluster.
   
     
-* **POST /snapshot/{clusterName}**
+* **POST /snapshot/cluster/{clusterName}**
   * Expected query parameters:
 	    * *keyspace*: Name of the Cassandra cluster.
 	    * *tables*: The name of the targeted tables (column families) as comma separated list.
@@ -262,7 +262,7 @@ Returns OK if all goes well NOT_MODIFIED if new state is the same as the old one
     * Create a snapshot on all hosts in a cluster, using the same name.
   
   
-* **POST /snapshot/{clusterName}/{host}**
+* **POST /snapshot/cluster/{clusterName}/{host}**
   * Expected query parameters:
 	    * *keyspace*: Name of the Cassandra cluster.
 	    * *tables*: The name of the targeted tables (column families) as comma separated list.
@@ -276,4 +276,35 @@ Returns OK if all goes well NOT_MODIFIED if new state is the same as the old one
   * Expected query parameters:
 	    * *text*: The text to encrypt.
   * Encrypt text when cryptograph settings are configured in the reaper yaml.
+
+## Node Resource
+
+* **GET /node/tpstats/{clusterName}/{host}**
+    * Expected query parameters: *None*
+    * Returns thread pool stats for a node.
+
+
+* **GET /node/dropped/{clusterName}/{host}**
+    * Expected query parameters: *None*
+    * Returns dropped messages stats for a node.
+
+
+* **GET /node/clientRequestLatencies/{clusterName}/{host}**
+    * Expected query parameters: *None*
+    * Returns client request latencies for a node.
+
+
+* **GET /node/streams/{clusterName}/{host}**
+    * Expected query parameters: *None*
+    * Returns streams currently happening on a node.
+
+
+* **GET /node/compactions/{clusterName}/{host}**
+    * Expected query parameters: *None*
+    * Returns thread pool stats for a node.
+
+
+* **GET /node/tokens/{clusterName}/{host}**
+    * Expected query parameters: *None*
+    * Returns the tokens owned by a node.
 

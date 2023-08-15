@@ -30,45 +30,41 @@ jobs:
     runs-on: ubuntu-20.04
     env:
       JACOCO_VERSION: 0.8.6
+      REAPER_ENCRYPTION_KEY: SECRET_KEY
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      - name: Setup Maven Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven2-
-
-      - name: Setup Java
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'adopt' # See 'Supported distributions' for available options
-          java-version: '8.0.192'
-
-      - name: Setup Node
-        uses: actions/setup-node@v1
-        with:
-          node-version: '10.x'
-
-      - name: Setup bower
-        run: npm install -g bower
-
-      - name: Setup Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.x'
-          architecture: 'x64'
+      - name: Setup
+        uses: ./.github/actions/setup
 
       - name: Build Reaper
         run: |
           MAVEN_OPTS="-Xmx384m" mvn -B org.jacoco:jacoco-maven-plugin:${{ env.JACOCO_VERSION }}:prepare-agent install org.jacoco:jacoco-maven-plugin:${{ env.JACOCO_VERSION }}:report
           mv src/server/target/site/jacoco src/server/target/site/jacoco_ut    
           mvn -B org.jacoco:jacoco-maven-plugin:${{ env.JACOCO_VERSION }}:prepare-agent surefire:test org.jacoco:jacoco-maven-plugin:${{ env.JACOCO_VERSION }}:report -Dtest=ReaperShiroIT
-      
+
       - uses: codecov/codecov-action@v1
+
+  docker-tests:
+    name: Docker Image Tests
+    needs: build
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        storage-type: [cassandra]
+        test-type: [docker]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Run Tests
+        run: ./.github/scripts/run-tests.sh
+        env:
+          TEST_TYPE: ${{ matrix.test-type }}
 
       - name: Setup tmate session
         if: "failure()"
@@ -76,60 +72,53 @@ jobs:
         timeout-minutes: 30
 
   its-ccm-local:
-    name: H2 and Memory backends
+    name: Memory backends
     needs: build
     runs-on: ubuntu-20.04
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       matrix:
-        cassandra-version: [1.2.19, 2.0.17, 2.1.22, 2.2.19, 3.0.24, 3.11.10, 'github:apache/trunk']
+        cassandra-version: [ "binary:1.2.19", "binary:2.0.17", 'binary:2.1.22', 'binary:2.2.19', 'binary:3.0.25', 'binary:3.11.11', 'binary:4.0.1' ]
         storage-type: [local]
         test-type: [ccm]
         include:
           # don't run against the following C* versions when using cassandra storage type
-          - cassandra-version: 1.2.19
+          - cassandra-version: "binary:1.2.19"
             cucumber-options: '--tags ~@cassandra_2_1_onwards --tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 2.0.17
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: "binary:2.0.17"
             cucumber-options: '--tags ~@cassandra_2_1_onwards --tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 2.1.22
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: 'binary:2.1.22'
             cucumber-options: '--tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 2.2.19
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: 'binary:2.2.19'
             cucumber-options: '--tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 3.0.24
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: 'binary:3.0.25'
             cucumber-options: '--tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 3.11.10
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: 'binary:3.11.11'
             cucumber-options: '--tags ~@cassandra_4_0_onwards'
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: 'binary:4.0.1'
+            experimental: false
+            jdk-version: '11'
+          #- cassandra-version: 'github:apache/trunk'
+          #  experimental: true
+          #  jdk-version: '11'
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      - name: Setup Maven Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven2-
-
-
-      - name: Setup Java
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'adopt' # See 'Supported distributions' for available options
-          java-version: '8.0.192'
-
-      - name: Setup Node
-        uses: actions/setup-node@v1
-        with:
-          node-version: '10.x'
-
-      - name: Setup bower
-        run: npm install -g bower
-
-      - name: Setup Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.x'
-          architecture: 'x64'
+      - name: Setup
+        uses: ./.github/actions/setup
 
       - name: Install CCM
         run: |
@@ -142,6 +131,7 @@ jobs:
           TEST_TYPE: ${{ matrix.test-type }}
           CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
           STORAGE_TYPE: ${{ matrix.storage-type }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
 
       - name: Run Tests
         run: ./.github/scripts/run-tests.sh
@@ -150,101 +140,7 @@ jobs:
           CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
           STORAGE_TYPE: ${{ matrix.storage-type }}
           CUCUMBER_OPTIONS: ${{ matrix.cucumber-options }}
-
-      - uses: codecov/codecov-action@v1
-
-      - name: Setup tmate session
-        if: "failure()"
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 30
-
-  its-pgsql:
-    name: Postgres backend
-    needs: build
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        cassandra-version: [3.11.10]
-        storage-type: [postgresql]
-        test-type: [ccm]
-        grim-max: [1, 2, 4]
-        cucumber-options: ['--tags ~@cassandra_4_0_onwards']
-        # for each grim-max, specify corresponding min
-        include:
-          - grim-max: 1
-            grim-min: 1
-          - grim-max: 2
-            grim-min: 2
-          - grim-max: 4
-            grim-min: 2
-        # in case of sidecar and pgsql, we only want the grim-min/max of 1/1
-        exclude:
-          - test-type: sidecar
-            grim-max: 2
-          - test-type: sidecar
-            grim-max: 4
-          - test-type: each
-            grim-max: 2
-          - test-type: each
-            grim-max: 4
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Setup Maven Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven2-
-
-
-      - name: Setup Java
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'adopt' # See 'Supported distributions' for available options
-          java-version: '8.0.192'
-
-      - name: Setup Node
-        uses: actions/setup-node@v1
-        with:
-          node-version: '10.x'
-
-      - name: Setup bower
-        run: npm install -g bower
-
-      - name: Setup Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.x'
-          architecture: 'x64'
-
-      - name: Setup postgres DB
-        run:
-          docker run --name posttest -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=reaper postgres:alpine -c max_connections=300
-
-      - name: Install CCM
-        run: |
-          pip install pyyaml
-          pip install ccm
-
-      - name: Setup CCM Cluster
-        run: ./.github/scripts/configure-ccm.sh
-        env:
-          TEST_TYPE: ${{ matrix.test-type }}
-          CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
-          STORAGE_TYPE: ${{ matrix.storage-type }}
-
-      - name: Run Tests
-        run: ./.github/scripts/run-tests.sh
-        env:
-          TEST_TYPE: ${{ matrix.test-type }}
-          CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
-          STORAGE_TYPE: ${{ matrix.storage-type }}
-          GRIM_MAX: ${{ matrix.grim-max }}
-          GRIM_MIN: ${{ matrix.grim-min }}
-          CUCUMBER_OPTIONS: ${{ matrix.cucumber-options }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
 
       - uses: codecov/codecov-action@v1
 
@@ -257,52 +153,33 @@ jobs:
     needs: build
     name: Cassandra backend
     runs-on: ubuntu-20.04
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       matrix:
-        cassandra-version: [2.1.22, 2.2.19, 3.0.24, 3.11.10, 'github:apache/trunk']
+        cassandra-version: [ 'binary:3.0.25', 'binary:3.11.11', 'binary:4.0.1']
         storage-type: [cassandra]
         test-type: [ccm]
         include:
-          - cassandra-version: 2.1.22
+          - cassandra-version: 'binary:3.0.25'
             cucumber-options: '--tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 2.2.19
-            cucumber-options: '--tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 3.0.24
-            cucumber-options: '--tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 3.11.10
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: 'binary:3.11.11'
             cucumber-options: '--tags ~@cassandra_4_0_onwards'
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: 'binary:4.0.1'
+            experimental: false
+            jdk-version: '11'
+          #- cassandra-version: 'github:apache/trunk'
+          #  experimental: true
+          #  jdk-version: '11'
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      - name: Setup Maven Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven2-
-
-
-      - name: Setup Java
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'adopt' # See 'Supported distributions' for available options
-          java-version: '8.0.192'
-
-      - name: Setup Node
-        uses: actions/setup-node@v1
-        with:
-          node-version: '10.x'
-
-      - name: Setup bower
-        run: npm install -g bower
-
-      - name: Setup Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.x'
-          architecture: 'x64'
+      - name: Setup
+        uses: ./.github/actions/setup
 
       - name: Install CCM
         run: |
@@ -315,6 +192,7 @@ jobs:
           TEST_TYPE: ${{ matrix.test-type }}
           CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
           STORAGE_TYPE: ${{ matrix.storage-type }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
 
       - name: Run Tests
         run: ./.github/scripts/run-tests.sh
@@ -323,7 +201,8 @@ jobs:
           CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
           STORAGE_TYPE: ${{ matrix.storage-type }}
           CUCUMBER_OPTIONS: ${{ matrix.cucumber-options }}
-      
+          JDK_VERSION: ${{ matrix.jdk-version }}
+
       - uses: codecov/codecov-action@v1
 
       - name: Setup tmate session
@@ -331,144 +210,42 @@ jobs:
         uses: mxschmitt/action-tmate@v3
         timeout-minutes: 30
 
-  its-elassandra:
-    needs: build
-    name: Elassandra Backend
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        test-type: [elassandra]
-        storage-type: [elassandra]
-        elassandra-version: ['6.2.3.26']
-        grim-min: [1]
-        grim-max: [1]
-        cucumber-options: ['--tags ~@cassandra_4_0_onwards']
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Setup Maven Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven2-
-
-
-      - name: Setup Java
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'adopt' # See 'Supported distributions' for available options
-          java-version: '8.0.192'
-
-      - name: Setup Node
-        uses: actions/setup-node@v1
-        with:
-          node-version: '10.x'
-
-      - name: Setup bower
-        run: npm install -g bower
-
-      - name: Install ECM
-        run: |
-          wget -O ecm-ccm-elassandra.zip https://github.com/strapdata/ecm/archive/ccm-elassandra.zip
-          unzip ecm-ccm-elassandra.zip && cd ecm-ccm-elassandra && sudo ./setup.py install
-
-      - name: Download Elassandra
-        run: |
-          wget -O elassandra-${ELASSANDRA_VERSION}.tar.gz https://github.com/strapdata/elassandra/releases/download/v${ELASSANDRA_VERSION}/elassandra-${ELASSANDRA_VERSION}.tar.gz
-        env:
-          ELASSANDRA_VERSION: ${{ matrix.elassandra-version }}
-
-      - name: Setup ECM Cluster
-        run: ./.github/scripts/configure-ccm.sh
-        env:
-          TEST_TYPE: ${{ matrix.test-type }}
-          ELASSANDRA_VERSION: ${{ matrix.elassandra-version }}
-          STORAGE_TYPE: ${{ matrix.storage-type }}
-
-      - name: Run Tests
-        run: |
-          ./.github/scripts/run-tests.sh || ./.github/scripts/run-tests.sh || ./.github/scripts/run-tests.sh
-        env:
-          TEST_TYPE: ${{ matrix.test-type }}
-          STORAGE_TYPE: ${{ matrix.storage-type }}
-          CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
-          CUCUMBER_OPTIONS: ${{ matrix.cucumber-options }}
-          GRIM_MAX: ${{ matrix.grim-max }}
-          GRIM_MIN: ${{ matrix.grim-min }}
-
-      - uses: codecov/codecov-action@v1
-
   its-sidecar:
-    needs: [its-ccm-local, its-pgsql, its-ccm-cass, its-elassandra]
+    needs: [docker-tests, its-ccm-local, its-ccm-cass]
     name: Sidecar
     runs-on: ubuntu-20.04
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       matrix:
-        cassandra-version: [2.1.22, 2.2.19, 3.0.24, 3.11.10, 'github:apache/trunk']
-        storage-type: [cassandra, postgresql]
+        cassandra-version: ['binary:3.0.25', 'binary:3.11.11', 'binary:4.0.1']
+        storage-type: [cassandra]
         test-type: [sidecar]
         grim-max: [1]
         grim-min: [1]
         # all versions but trunk have the same cucumber options, but we can't declare that more effectively (yet)
         include:
-          - cassandra-version: 2.1.22
+          - cassandra-version: 'binary:3.0.25'
             cucumber-options: '--tags ~@cassandra_4_0_onwards --tags @sidecar --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 2.2.19
-            cucumber-options: '--tags ~@cassandra_4_0_onwards --tags @sidecar --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 3.0.24
-            cucumber-options: '--tags ~@cassandra_4_0_onwards --tags @sidecar --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 3.11.10
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: 'binary:3.11.11'
             cucumber-options: '--tags ~@cassandra_4_0_onwards --tags @sidecar'
-          - cassandra-version: 'github:apache/trunk'
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: 'binary:4.0.1'
             cucumber-options: '--tags @sidecar'
-        # sidecar test including postgres should only run with C* 3.11.10, so we exclude all other
-        exclude:
-          - storage-type: postgresql
-            cassandra-version: 2.1.22
-          - storage-type: postgresql
-            cassandra-version: 2.2.19
-          - storage-type: postgresql
-            cassandra-version: 3.0.24
-          - storage-type: postgresql
-            cassandra-version: 'github:apache/trunk'
+            experimental: false
+            jdk-version: '11'
+          #- cassandra-version: 'github:apache/trunk'
+          #  cucumber-options: '--tags @sidecar'
+          #  experimental: true
+          #  jdk-version: '11'
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      - name: Setup Maven Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven2-
-
-      - name: Setup Java
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'adopt' # See 'Supported distributions' for available options
-          java-version: '8.0.192'
-
-      - name: Setup Node
-        uses: actions/setup-node@v1
-        with:
-          node-version: '10.x'
-
-      - name: Setup bower
-        run: npm install -g bower
-
-      - name: Setup Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.x'
-          architecture: 'x64'
-
-      - name: Setup postgres DB
-        run:
-          docker run --name posttest -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=reaper postgres:alpine -c max_connections=300
+      - name: Setup
+        uses: ./.github/actions/setup
 
       - name: Install CCM
         run: |
@@ -481,6 +258,7 @@ jobs:
           TEST_TYPE: ${{ matrix.test-type }}
           CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
           STORAGE_TYPE: ${{ matrix.storage-type }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
 
       - name: Run Tests
         run: ./.github/scripts/run-tests.sh || ./.github/scripts/run-tests.sh
@@ -491,73 +269,91 @@ jobs:
           GRIM_MAX: ${{ matrix.grim-max }}
           GRIM_MIN: ${{ matrix.grim-min }}
           CUCUMBER_OPTIONS: ${{ matrix.cucumber-options }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
+
+      - uses: codecov/codecov-action@v1
+
+  its-http-management:
+    needs: [ build ]
+    name: HTTP Management
+    runs-on: ubuntu-20.04
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      matrix:
+        cassandra-version: [ 'binary:3.11.11', 'binary:4.0.1' ]
+        storage-type: [ local ]
+        test-type: [ "http-api" ]
+        grim-max: [ 1 ]
+        grim-min: [ 1 ]
+        # all versions but trunk have the same cucumber options, but we can't declare that more effectively (yet)
+        include:
+          - cassandra-version: 'binary:3.11.11'
+            cucumber-options: '--tags ~@cassandra_4_0_onwards --tags @http_management'
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: 'binary:4.0.1'
+            cucumber-options: '--tags @http_management'
+            experimental: false
+            jdk-version: '11'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Install CCM
+        run: |
+          pip install pyyaml
+          pip install ccm
+
+      - name: Setup CCM Cluster
+        run: ./.github/scripts/configure-ccm.sh
+        env:
+          TEST_TYPE: ${{ matrix.test-type }}
+          CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
+          STORAGE_TYPE: ${{ matrix.storage-type }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
+
+      - name: Run Tests
+        run: ./.github/scripts/run-tests.sh
+        env:
+          TEST_TYPE: ${{ matrix.test-type }}
+          CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
+          STORAGE_TYPE: ${{ matrix.storage-type }}
+          GRIM_MAX: ${{ matrix.grim-max }}
+          GRIM_MIN: ${{ matrix.grim-min }}
+          CUCUMBER_OPTIONS: ${{ matrix.cucumber-options }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
 
       - uses: codecov/codecov-action@v1
 
   its-each:
-    needs: [its-ccm-local, its-pgsql, its-ccm-cass, its-elassandra]
+    needs: [docker-tests, its-ccm-local, its-ccm-cass]
     name: Each DC Availability
     runs-on: ubuntu-20.04
-    services:
-      postgres:
-        image: postgres:9.4
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          # this replaces the manual reaper creation
-          POSTGRES_DB: reaper
-        ports:
-          - 5432:5432
-        # needed because the postgres container does not provide a healthcheck
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       matrix:
-        cassandra-version: [3.11.10, 'github:apache/trunk']
-        storage-type: [cassandra, postgresql]
+        cassandra-version: ['binary:4.0.1']
+        storage-type: [cassandra]
         test-type: [each]
         grim-max: [1]
         grim-min: [1]
-        # Reducing the scope to 3.11 and trunk to shorten the integration test times
+        # Reduced scope to shorten the integration test times
         include:
-          - cassandra-version: 3.11.10
-            cucumber-options: '--tags ~@cassandra_4_0_onwards --tags @sidecar'
-          - cassandra-version: 'github:apache/trunk'
+          - cassandra-version: 'binary:4.0.1'
             cucumber-options: '--tags @sidecar'
-        # sidecar test including postgres should only run with C* 3.11.10, so we exclude all other
-        exclude:
-          - storage-type: postgresql
-            cassandra-version: 'github:apache/trunk'
+            experimental: false
+          #- cassandra-version: 'github:apache/trunk'
+          #  cucumber-options: '--tags @sidecar'
+          #  experimental: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      - name: Setup Maven Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven2-
-
-      - name: Setup Java
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'adopt' # See 'Supported distributions' for available options
-          java-version: '8.0.192'
-
-      - name: Setup Node
-        uses: actions/setup-node@v1
-        with:
-          node-version: '10.x'
-
-      - name: Setup bower
-        run: npm install -g bower
-
-      - name: Setup Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.x'
-          architecture: 'x64'
+      - name: Setup
+        uses: ./.github/actions/setup
 
       - name: Install CCM
         run: |
@@ -570,6 +366,7 @@ jobs:
           TEST_TYPE: ${{ matrix.test-type }}
           CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
           STORAGE_TYPE: ${{ matrix.storage-type }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
 
       - name: Run Tests
         run: ./.github/scripts/run-tests.sh || ./.github/scripts/run-tests.sh
@@ -580,62 +377,43 @@ jobs:
           GRIM_MAX: ${{ matrix.grim-max }}
           GRIM_MIN: ${{ matrix.grim-min }}
           CUCUMBER_OPTIONS: ${{ matrix.cucumber-options }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
 
       - uses: codecov/codecov-action@v1
 
   its-distributed:
-    needs: [its-ccm-local, its-pgsql, its-ccm-cass, its-elassandra]
+    needs: [docker-tests, its-ccm-local, its-ccm-cass]
     name: Distributed tests
     runs-on: ubuntu-20.04
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       matrix:
-        cassandra-version: [2.1.22, 2.2.19, 3.0.24, 3.11.10, 'github:apache/trunk']
+        cassandra-version: ['binary:3.0.25', 'binary:3.11.11', 'binary:4.0.1']
         storage-type: [cassandra]
         test-type: [ccm]
         grim-max: [2]
         grim-min: [2]
         include:
-          # all versions but trunk need to exclude trunk tests
-          - cassandra-version: 2.1.22
+          - cassandra-version: 'binary:3.0.25'
             cucumber-options: '--tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 2.2.19
-            cucumber-options: '--tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 3.0.24
-            cucumber-options: '--tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 3.11.10
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: 'binary:3.11.11'
             cucumber-options: '--tags ~@cassandra_4_0_onwards'
+            experimental: false
+            jdk-version: '8'
+          - cassandra-version: 'binary:4.0.1'
+            experimental: false
+            jdk-version: '11'
+          #- cassandra-version: 'github:apache/trunk'
+          #  experimental: true
+          #  jdk-version: '11'
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      - name: Setup Maven Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven2-
-
-
-      - name: Setup Java
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'adopt' # See 'Supported distributions' for available options
-          java-version: '8.0.192'
-
-      - name: Setup Node
-        uses: actions/setup-node@v1
-        with:
-          node-version: '10.x'
-
-      - name: Setup bower
-        run: npm install -g bower
-
-      - name: Setup Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.x'
-          architecture: 'x64'
+      - name: Setup
+        uses: ./.github/actions/setup
 
       - name: Install CCM
         run: |
@@ -648,6 +426,7 @@ jobs:
           TEST_TYPE: ${{ matrix.test-type }}
           CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
           STORAGE_TYPE: ${{ matrix.storage-type }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
 
       - name: Run Tests
         run: ./.github/scripts/run-tests.sh || ./.github/scripts/run-tests.sh
@@ -658,63 +437,37 @@ jobs:
           CUCUMBER_OPTIONS: ${{ matrix.cucumber-options }}
           GRIM_MAX: ${{ matrix.grim-max }}
           GRIM_MIN: ${{ matrix.grim-min }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
 
       - uses: codecov/codecov-action@v1
 
-
   its-flapping:
-    needs: [its-ccm-local, its-pgsql, its-ccm-cass, its-elassandra]
+    needs: [docker-tests, its-ccm-local, its-ccm-cass]
     name: Flapping reapers
     runs-on: ubuntu-20.04
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       matrix:
-        cassandra-version: [2.1.22, 2.2.19, 3.0.24, 3.11.10, 'github:apache/trunk']
+        cassandra-version: ['binary:4.0.1']
         storage-type: [cassandra]
         test-type: [ccm]
         grim-max: [4]
         grim-min: [2]
+        cucumber-options: ['--tags ~@diag_event_subscriptions']
         include:
           # all versions but trunk need to exclude trunk tests
-          - cassandra-version: 2.1.22
-            cucumber-options: '--tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 2.2.19
-            cucumber-options: '--tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 3.0.24
-            cucumber-options: '--tags ~@cassandra_4_0_onwards --tags ~@cassandra_3_11_onwards'
-          - cassandra-version: 3.11.10
-            cucumber-options: '--tags ~@cassandra_4_0_onwards'
+          - cassandra-version: 'binary:4.0.1'
+            experimental: true
+            jdk-version: '11'
+          #- cassandra-version: 'github:apache/trunk'
+          #  experimental: true
+          #  jdk-version: '11'
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      - name: Setup Maven Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven2-
-
-
-      - name: Setup Java
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'adopt' # See 'Supported distributions' for available options
-          java-version: '8.0.192'
-
-      - name: Setup Node
-        uses: actions/setup-node@v1
-        with:
-          node-version: '10.x'
-
-      - name: Setup bower
-        run: npm install -g bower
-
-      - name: Setup Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.x'
-          architecture: 'x64'
+      - name: Setup
+        uses: ./.github/actions/setup
 
       - name: Install CCM
         run: |
@@ -727,6 +480,7 @@ jobs:
           TEST_TYPE: ${{ matrix.test-type }}
           CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
           STORAGE_TYPE: ${{ matrix.storage-type }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
 
       - name: Run Tests
         run: |
@@ -738,115 +492,21 @@ jobs:
           CUCUMBER_OPTIONS: ${{ matrix.cucumber-options }}
           GRIM_MAX: ${{ matrix.grim-max }}
           GRIM_MIN: ${{ matrix.grim-min }}
-
-      - uses: codecov/codecov-action@v1
-
-  its-elassandra-distributed:
-    needs: [its-ccm-local, its-pgsql, its-ccm-cass, its-elassandra]
-    name: Distributed tests with Elassandra
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        test-type: [elassandra]
-        storage-type: [elassandra]
-        elassandra-version: ['6.2.3.26']
-        grim-min: [2]
-        grim-max: [4]
-        cucumber-options: ['--tags ~@cassandra_4_0_onwards']
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Setup Maven Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven2-
-
-
-      - name: Setup Java
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'adopt' # See 'Supported distributions' for available options
-          java-version: '8.0.192'
-
-      - name: Setup Node
-        uses: actions/setup-node@v1
-        with:
-          node-version: '10.x'
-
-      - name: Setup bower
-        run: npm install -g bower
-
-      - name: Install ECM
-        run: |
-          wget -O ecm-ccm-elassandra.zip https://github.com/strapdata/ecm/archive/ccm-elassandra.zip
-          unzip ecm-ccm-elassandra.zip && cd ecm-ccm-elassandra && sudo ./setup.py install
-
-      - name: Download Elassandra
-        run: |
-          wget -O elassandra-${ELASSANDRA_VERSION}.tar.gz https://github.com/strapdata/elassandra/releases/download/v${ELASSANDRA_VERSION}/elassandra-${ELASSANDRA_VERSION}.tar.gz
-        env:
-          ELASSANDRA_VERSION: ${{ matrix.elassandra-version }}
-
-      - name: Setup ECM Cluster
-        run: ./.github/scripts/configure-ccm.sh
-        env:
-          TEST_TYPE: ${{ matrix.test-type }}
-          ELASSANDRA_VERSION: ${{ matrix.elassandra-version }}
-          STORAGE_TYPE: ${{ matrix.storage-type }}
-
-      - name: Run Tests
-        run: |
-          ./.github/scripts/run-tests.sh || ./.github/scripts/run-tests.sh || ./.github/scripts/run-tests.sh
-        env:
-          TEST_TYPE: ${{ matrix.test-type }}
-          STORAGE_TYPE: ${{ matrix.storage-type }}
-          CASSANDRA_VERSION: ${{ matrix.cassandra-version }}
-          CUCUMBER_OPTIONS: ${{ matrix.cucumber-options }}
-          GRIM_MAX: ${{ matrix.grim-max }}
-          GRIM_MIN: ${{ matrix.grim-min }}
+          JDK_VERSION: ${{ matrix.jdk-version }}
 
       - uses: codecov/codecov-action@v1
 
   release:
     name: Release Reaper
-    needs: [its-distributed, its-flapping, its-sidecar, its-elassandra-distributed, its-each]
+    needs: [its-distributed, its-flapping, its-sidecar, its-each]
     if: startsWith(github.ref, 'refs/heads/master') || startsWith(github.ref, 'refs/tag')
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      - name: Setup Maven Cache
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven2-
-
-      - name: Setup Java
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'adopt' # See 'Supported distributions' for available options
-          java-version: '8.0.192'
-
-      - name: Setup Node
-        uses: actions/setup-node@v1
-        with:
-          node-version: '10.x'
-
-      - name: Setup bower
-        run: npm install -g bower
-
-      - name: Setup Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.x'
-          architecture: 'x64'
+      - name: Setup
+        uses: ./.github/actions/setup
 
       - name: Compute version number
         run: |
@@ -926,7 +586,7 @@ jobs:
           release: 'any-version'
           republish: 'true'
           file: ${{ env.RPM_RELEASE_FILE }}
-      
+
       ## Beta releases
       - name: Push Debian Beta to Cloudsmith
         id: push-beta-deb
@@ -957,4 +617,3 @@ jobs:
           release: 'any-version'
           republish: 'true'
           file: ${{ env.RPM_RELEASE_FILE }}
-      

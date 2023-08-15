@@ -50,7 +50,8 @@ The Docker environment variables listed in this section map directly to Reaper s
 <code class="codeLarge">REAPER_SERVER_APP_PORT</code> | [port]({{< relref "reaper_specific.md#port" >}}) | 8080
 <code class="codeLarge">REAPER_STORAGE_TYPE</code> | [storageType]({{< relref "reaper_specific.md#storagetype" >}}) | memory
 <code class="codeLarge">REAPER_USE_ADDRESS_TRANSLATOR</code> | [useAddressTranslator]({{< relref "reaper_specific.md#useaddresstranslator" >}}) | false
-<code class="codeLarge">REAPER_MAX_PARALLEL_REPAIRS</code> | [maxParallelRepairs]({{< relref "reaper_specific.md#maxParallelRepairs" >}}) | false
+<code class="codeLarge">REAPER_MAX_PARALLEL_REPAIRS</code> | [maxParallelRepairs]({{< relref "reaper_specific.md#maxParallelRepairs" >}}) | 2
+<code class="codeLarge">CRYPTO_SYSTEM_PROPERTY_SECRET</code> | [cryptograph/systemPropertySecret]({{< relref "reaper_specific.md#cryptograph" >}}) | Unset
 
 <br/>
 
@@ -71,7 +72,7 @@ Example :
 REAPER_CASS_ADDRESS_TRANSLATOR_TYPE=multiIpPerNode
 REAPER_CASS_ADDRESS_TRANSLATOR_MAPPING=host1:ip1,host2:ip2
 ```
-config bloc at the container startup file '/etc/cassandra-reaper.yml' :
+config bloc at the container startup file '/etc/cassandra-reaper/cassandra-reaper.yml' :
 ```
  addressTranslator:
     type: multiIpPerNode
@@ -171,7 +172,7 @@ In order for the Cassandra backend to be used, `REAPER_STORAGE_TYPE` must be set
 <code class="codeLarge">REAPER_CASS_CLUSTER_NAME</code> | [clusterName]({{< relref "backend_specific.md#clustername" >}}) | clustername
 <code class="codeLarge">REAPER_CASS_CONTACT_POINTS</code> | [contactPoints]({{< relref "backend_specific.md#contactpoints" >}}) | []
 <code class="codeLarge">REAPER_CASS_PORT</code> | [port]({{< relref "backend_specific.md#port" >}}) | []
-<code class="codeLarge">REAPER_CASS_KEYSPACE</code> | [keyspace]({{< relref "backend_specific.md#keyspace" >}}) | cassandra-reaper
+<code class="codeLarge">REAPER_CASS_KEYSPACE</code> | [keyspace]({{< relref "backend_specific.md#keyspace" >}}) | reaper_db
 <code class="codeLarge">REAPER_CASS_LOCAL_DC</code> | [localDC]({{< relref "backend_specific.md#localdc" >}}) |
 <code class="codeLarge">REAPER_CASS_AUTH_USERNAME</code> | [username]({{< relref "backend_specific.md#username" >}}) | cassandra
 <code class="codeLarge">REAPER_CASS_AUTH_PASSWORD</code> | [password]({{< relref "backend_specific.md#password" >}}) | cassandra
@@ -219,6 +220,8 @@ Default: *false*
 Allows Reaper to establish an encrypted connection when establishing a connection with Cassandra via the native protocol.
 
 ## Direct Mapping to H2 or Postgres Backend Configuration Settings
+
+**Removed in v3.0.0**
 
 The Docker environment variables listed in this section map directly to H2/Postgres backend specific settings in the *cassandra-reaper.yaml* configuration file. The following table below lists the Docker environment variables, their associated H2/Postgres backend specific setting in the *cassandra-reaper.yaml* configuration file, and the default value assigned by the Docker container (if any). Definitions for each Docker environment variable can be found via the link to the associated setting.
 

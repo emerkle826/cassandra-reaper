@@ -20,7 +20,6 @@ package io.cassandrareaper.core;
 import java.math.BigInteger;
 import java.util.Map;
 import java.util.UUID;
-
 import javax.annotation.Nullable;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -45,6 +44,9 @@ public final class RepairSegment {
   private final DateTime startTime;
   private final DateTime endTime;
   private final Map<String, String> replicas;
+  // hostID field is only ever populated for incremental repairs. For full repairs it is always null.
+  private final UUID hostID;
+
 
   private RepairSegment(Builder builder, @Nullable UUID id) {
     this.id = id;
@@ -59,6 +61,7 @@ public final class RepairSegment {
     this.replicas = builder.replicas != null
         ? ImmutableMap.copyOf(builder.replicas)
         : null;
+    this.hostID = builder.hostID;
   }
 
   public static Builder builder(Segment tokenRange, UUID repairUnitId) {
@@ -130,6 +133,10 @@ public final class RepairSegment {
     return null != endTime;
   }
 
+  public UUID getHostID() {
+    return hostID;
+  }
+
   /** Reset to NOT_STARTED state, with nulled startTime and endTime. */
   public Builder reset() {
     Builder builder = new Builder(this);
@@ -160,6 +167,7 @@ public final class RepairSegment {
     private DateTime startTime;
     private DateTime endTime;
     private Map<String, String> replicas;
+    private UUID hostID;
 
     private Builder() {}
 
@@ -171,6 +179,7 @@ public final class RepairSegment {
       this.failCount = 0;
       this.state = State.NOT_STARTED;
       this.replicas = tokenRange.getReplicas();
+      this.hostID = null;
     }
 
     private Builder(RepairSegment original) {
@@ -184,6 +193,7 @@ public final class RepairSegment {
       startTime = original.startTime;
       endTime = original.endTime;
       replicas = original.replicas;
+      hostID = original.hostID;
     }
 
     public Builder withRunId(UUID runId) {
@@ -242,6 +252,12 @@ public final class RepairSegment {
       this.replicas = replicas;
       return this;
     }
+
+    public Builder withHostID(UUID hostID) {
+      this.hostID = hostID;
+      return this;
+    }
+
 
     public RepairSegment build() {
       // a null segmentId is a special case where the storage uses a sequence for it

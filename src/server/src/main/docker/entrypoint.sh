@@ -33,8 +33,11 @@ function wait_for {
 
 if [ "$1" = 'cassandra-reaper' ]; then
 
-    # get around `/usr/local/bin/configure-persistence.sh: line 65: can't create /etc/cassandra-reaper.yml: Interrupted system call` unknown error
-    touch /etc/cassandra-reaper.yml
+    if [ -z "$REAPER_HEAP_SIZE" ]; then
+        REAPER_HEAP_SIZE="1G"
+    fi
+    # get around `/usr/local/bin/configure-persistence.sh: line 65: can't create /etc/cassandra-reaper/cassandra-reaper.yml: Interrupted system call` unknown error
+    touch /etc/cassandra-reaper/cassandra-reaper.yml
 
     /usr/local/bin/configure-persistence.sh
     /usr/local/bin/configure-webui-authentication.sh
@@ -42,8 +45,25 @@ if [ "$1" = 'cassandra-reaper' ]; then
     /usr/local/bin/configure-jmx-credentials.sh
     exec java \
             ${JAVA_OPTS} \
+            -Xms${REAPER_HEAP_SIZE} \
+            -Xmx${REAPER_HEAP_SIZE} \
             -cp "/usr/local/lib/*" io.cassandrareaper.ReaperApplication server \
-            /etc/cassandra-reaper.yml
+            /etc/cassandra-reaper/cassandra-reaper.yml
+fi
+
+if [ "$1" = 'schema-migration' ]; then
+
+    # get around `/usr/local/bin/configure-persistence.sh: line 65: can't create /etc/cassandra-reaper/cassandra-reaper.yml: Interrupted system call` unknown error
+    touch /etc/cassandra-reaper/cassandra-reaper.yml
+
+    /usr/local/bin/configure-persistence.sh
+    /usr/local/bin/configure-webui-authentication.sh
+    /usr/local/bin/configure-metrics.sh
+    /usr/local/bin/configure-jmx-credentials.sh
+    exec java \
+            ${JAVA_OPTS} \
+            -cp "/usr/local/lib/*" io.cassandrareaper.ReaperApplication schema-migration \
+            /etc/cassandra-reaper/cassandra-reaper.yml
 fi
 
 if [ "$1" = 'register-clusters' ]; then
@@ -67,8 +87,22 @@ if [ "$1" = 'register-clusters' ]; then
     REAPER_PORT=$4
   fi
 
+  if [ -z "$REAPER_AUTH_USER" ]; then
+    echo "The register-clusters command did not find a value for the REAPER_AUTH_USER environment variable. Defaulting to the admin user."
+    USERNAME="admin"
+  else
+    USERNAME=$REAPER_AUTH_USER
+  fi
+
+if [ -z "$REAPER_AUTH_PASSWORD" ]; then
+    echo "The register-clusters command did not find a value for the REAPER_AUTH_PASSWORD environment variable. Defaulting to the default admin password."
+    PASSWORD="admin"
+  else
+    PASSWORD=$REAPER_AUTH_PASSWORD
+  fi
+
   mkdir -p ~/.reaper
-  echo "admin" > ~/.reaper/credentials
+  echo ${PASSWORD} > ~/.reaper/credentials
 
   wait_for ${REAPER_HOST} ${REAPER_PORT}
 
@@ -76,7 +110,7 @@ if [ "$1" = 'register-clusters' ]; then
     SEED_HOST=$(echo ${SEED} | cut -d':' -f1)
     SEED_PORT=$(echo ${SEED} | cut -d':' -f2)
     wait_for ${SEED_HOST} ${SEED_PORT}
-    /usr/local/bin/spreaper login --reaper-host "${REAPER_HOST}" --reaper-port "${REAPER_PORT}" admin
+    /usr/local/bin/spreaper login --reaper-host "${REAPER_HOST}" --reaper-port "${REAPER_PORT}" $USERNAME
     /usr/local/bin/spreaper add-cluster --reaper-host "${REAPER_HOST}" --reaper-port "${REAPER_PORT}" "${SEED_HOST}" "${SEED_PORT}"
   done
 

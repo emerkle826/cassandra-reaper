@@ -20,9 +20,7 @@ package io.cassandrareaper.service;
 import io.cassandrareaper.AppContext;
 import io.cassandrareaper.ReaperException;
 import io.cassandrareaper.core.Cluster;
-import io.cassandrareaper.service.AutoSchedulingManager;
-import io.cassandrareaper.service.ClusterRepairScheduler;
-import io.cassandrareaper.storage.MemoryStorage;
+import io.cassandrareaper.storage.MemoryStorageFacade;
 
 import com.google.common.collect.ImmutableSet;
 import org.junit.Before;
@@ -53,7 +51,7 @@ public final class AutoSchedulingManagerTest {
   @Before
   public void setup() throws ReaperException {
     context = new AppContext();
-    context.storage = new MemoryStorage();
+    context.storage = new MemoryStorageFacade();
     context.config = TestRepairConfiguration.defaultConfig();
     clusterRepairScheduler = mock(ClusterRepairScheduler.class);
     repairAutoSchedulingManager = new AutoSchedulingManager(context, clusterRepairScheduler);
@@ -61,8 +59,8 @@ public final class AutoSchedulingManagerTest {
 
   @Test
   public void schedulesRepairForAllKeyspacesInAllClusters() throws Exception {
-    context.storage.addCluster(CLUSTER_1);
-    context.storage.addCluster(CLUSTER_2);
+    context.storage.getClusterDao().addCluster(CLUSTER_1);
+    context.storage.getClusterDao().addCluster(CLUSTER_2);
 
     repairAutoSchedulingManager.run();
 
@@ -72,8 +70,8 @@ public final class AutoSchedulingManagerTest {
 
   @Test
   public void continueProcessingOtherClusterWhenSchedulingFailsForACluster() throws Exception {
-    context.storage.addCluster(CLUSTER_1);
-    context.storage.addCluster(CLUSTER_2);
+    context.storage.getClusterDao().addCluster(CLUSTER_1);
+    context.storage.getClusterDao().addCluster(CLUSTER_2);
 
     doThrow(new RuntimeException("throw for test purposes")).when(clusterRepairScheduler).scheduleRepairs(CLUSTER_1);
 

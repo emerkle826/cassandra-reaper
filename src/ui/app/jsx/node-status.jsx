@@ -22,7 +22,7 @@ import Streams from "jsx/streams";
 import DroppedMessages from "jsx/dropped-messages";
 import ClientRequestLatency from "jsx/client-request-latency";
 import ActiveCompactions from "jsx/active-compactions";
-import {DeleteStatusMessageMixin, humanFileSize, getUrlPrefix, toast} from "jsx/mixin";
+import {DeleteStatusMessageMixin, humanFileSize, getUrlPrefix, toast, toastPermanent} from "jsx/mixin";
 import Modal from 'react-bootstrap/lib/Modal';
 import Button from 'react-bootstrap/lib/Button';
 import Tooltip from 'react-bootstrap/lib/Tooltip';
@@ -57,7 +57,27 @@ const NodeStatus = CreateReactClass({
     UNSAFE_componentWillMount: function() {
       this._getNodeTokens();
     },
-  
+
+    componentDidMount: function() {
+      this.setState({'datacenterAvailability': 'ALL'});
+      this.setState({communicating: true});
+      $.ajax({
+        url: getUrlPrefix(window.top.location.pathname) + '/reaper/datacenterAvailability',
+        method: 'GET',
+        component: this,
+        success: function(data) {
+          let reaperConfig = data;
+          this.component.setState({'datacenterAvailability': reaperConfig.datacenterAvailability});
+        },
+        complete: function(data) {
+          this.component.setState({communicating: false});
+        },
+        error: function(data) {
+          toastPermanent(this.component._notificationSystem, "Error : " + data.responseText, "error", currentClusterValue);
+        }
+      });
+    },
+
     _getNodeTokens: function() {
       $.ajax({
             url: this.state.urlPrefix + '/node/tokens/' + encodeURIComponent(this.props.clusterName) + '/' + encodeURIComponent(this.props.endpointStatus.endpoint),
@@ -88,7 +108,7 @@ const NodeStatus = CreateReactClass({
   
     _listSnapshots: function() {
       $.ajax({
-            url: getUrlPrefix(window.top.location.pathname) + '/snapshot/' +  encodeURIComponent(this.props.clusterName) + '/' + encodeURIComponent(this.props.endpointStatus.endpoint),
+            url: getUrlPrefix(window.top.location.pathname) + '/snapshot/cluster/' +  encodeURIComponent(this.props.clusterName) + '/' + encodeURIComponent(this.props.endpointStatus.endpoint),
             method: 'GET',
             component: this,
             complete: function(data) {
@@ -114,7 +134,7 @@ const NodeStatus = CreateReactClass({
       this.setState({communicating: true}); 
       toast(this.props.notificationSystem, "Taking a new snapshot...", "warning", this.props.endpointStatus.endpoint);   
       $.ajax({
-            url: getUrlPrefix(window.top.location.pathname) + '/snapshot/' +  encodeURIComponent(this.props.clusterName) + '/' + encodeURIComponent(this.props.endpointStatus.endpoint),
+            url: getUrlPrefix(window.top.location.pathname) + '/snapshot/cluster/' +  encodeURIComponent(this.props.clusterName) + '/' + encodeURIComponent(this.props.endpointStatus.endpoint),
             dataType: 'text',
             method: 'POST',
             component: this,
@@ -165,6 +185,8 @@ const NodeStatus = CreateReactClass({
     },
   
     render: function() {
+      const isStargate = this.props.endpointStatus.type === "STARGATE";
+
       let displayNodeStyle = {
         display: "none"
       }
@@ -193,8 +215,14 @@ const NodeStatus = CreateReactClass({
   
       let buttonStyle = "btn btn-xs btn-success";
       let largeButtonStyle = "btn btn-lg btn-static btn-success";
-  
-      if(!this.props.endpointStatus.status.endsWith('UP')){
+
+      // If the node is a Stargate node we won't have real status for it
+      // so we'll display it slightly differently
+      if (isStargate) {
+          buttonStyle = "btn btn-xs btn-info";
+          largeButtonStyle = "btn btn-lg btn-static btn-info";
+      // If it's not a stargate node, then we can appropriately use its status
+      } else if(!this.props.endpointStatus.status.endsWith('UP')){
         buttonStyle = "btn btn-xs btn-danger";
         largeButtonStyle = "btn btn-lg btn-static btn-danger";
       }
@@ -214,9 +242,24 @@ const NodeStatus = CreateReactClass({
         overflow: "auto",
         height: "200px"
       }
+
+      const modalTitle = (
+          <Modal.Title>
+              Endpoint {this.props.endpointStatus.endpoint}
+              {isStargate &&
+                  <span>&nbsp;(Stargate)</span>
+              }
+          </Modal.Title>
+      );
   
       const tooltip = (
-        <Tooltip id="tooltip"><strong>{this.props.endpointStatus.endpoint}</strong> ({humanFileSize(this.props.endpointStatus.load, 1024)})</Tooltip>
+        <Tooltip id="tooltip">
+          <strong>{this.props.endpointStatus.endpoint}</strong>
+          {isStargate &&
+            <span>&nbsp;(Stargate)</span>
+          }
+          &nbsp;({humanFileSize(this.props.endpointStatus.load, 1024)})
+        </Tooltip>
       );
 
       const tokenList = this.state.tokens.map(token => <div key={token}>{token}</div>);
@@ -251,7 +294,7 @@ const NodeStatus = CreateReactClass({
               <OverlayTrigger placement="top" overlay={tooltip}><button type="button" style={btStyle} className={buttonStyle} onClick={this.open}>&nbsp;</button></OverlayTrigger>
               <Modal show={this.state.showModal} onHide={this.close} bsSize="large" aria-labelledby="contained-modal-title-lg" dialogClassName="large-modal">
                 <Modal.Header closeButton>
-                  <Modal.Title>Endpoint {this.props.endpointStatus.endpoint}</Modal.Title>
+                  {modalTitle}
                 </Modal.Header>
                 <Modal.Body>
                   <div className="row">
@@ -264,26 +307,39 @@ const NodeStatus = CreateReactClass({
                       <p>{this.props.endpointStatus.dc} / {this.props.endpointStatus.rack}</p>
                     </div>
                     <div className="col-lg-3">
+                      <h4>Node Type</h4>
+                      <p>{isStargate ? "Stargate" : "Cassandra"}</p>
+                    </div>
+                    <div className="col-lg-3">
                       <h4>Release version</h4>
                       <p>{this.props.endpointStatus.releaseVersion}</p>
                     </div>
-                    <div className="col-lg-3">
-                      <h4>Tokens</h4>
-                      <p><OverlayTrigger trigger="click" placement="bottom" overlay={tokens}><button type="button" className="btn btn-md btn-info" style={takeSnapshotStyle}>{this.state.tokens.length}</button></OverlayTrigger></p>
-                    </div>
-                    <div className="col-lg-3">
-                      <h4>Status</h4>
-                      <p><button type="button" className={largeButtonStyle}>{this.props.endpointStatus.status}</button></p>
-                    </div>
-                    <div className="col-lg-3">                  
-                      <h4>Severity</h4>
-                      <p>{this.props.endpointStatus.severity}</p>
-                    </div>
-                    <div className="col-lg-3">                  
-                      <h4>Data size on disk</h4>
-                      <p>{humanFileSize(this.props.endpointStatus.load, 1024)}</p>
-                    </div>
+                    {!isStargate &&
+                      <div className="col-lg-3">
+                        <h4>Tokens</h4>
+                        <p><OverlayTrigger trigger="click" placement="bottom" overlay={tokens}><button type="button" className="btn btn-md btn-info" style={takeSnapshotStyle}>{this.state.tokens.length}</button></OverlayTrigger></p>
+                      </div>
+                    }
+                    {!isStargate &&
+                      <div className="col-lg-3">
+                        <h4>Status</h4>
+                        <p><button type="button" className={largeButtonStyle}>{this.props.endpointStatus.status}</button></p>
+                      </div>
+                    }
+                    {!isStargate &&
+                      <div className="col-lg-3">
+                        <h4>Severity</h4>
+                        <p>{this.props.endpointStatus.severity}</p>
+                      </div>
+                    }
+                    {!isStargate &&
+                      <div className="col-lg-3">
+                        <h4>Data size on disk</h4>
+                        <p>{humanFileSize(this.props.endpointStatus.load, 1024)}</p>
+                      </div>
+                    }
                   </div>
+                  {!isStargate &&
                   <div className="row">
                   <div className="col-lg-12">
                   <Tabs defaultActiveKey={1} id="node-tab">
@@ -315,10 +371,17 @@ const NodeStatus = CreateReactClass({
                         <div className="panel-body" id="snapshots">
                         <div className="row">
                           <div className="col-lg-12">
-                            <OverlayTrigger trigger="focus" placement="bottom" overlay={takeSnapshotClick}><button type="button" className="btn btn-md btn-success" style={takeSnapshotStyle}>Take a snapshot</button></OverlayTrigger>                  
+                            {this.state.datacenterAvailability != "ALL" &&
+                              <div className="alert alert-warning" role="alert">
+                                <p>
+                                  Reaper is configured with datacenterAvailability={this.state.datacenterAvailability}, only snapshots on reachable nodes are listed
+                                </p>
+                              </div>
+                            }
+                            <OverlayTrigger trigger="focus" placement="bottom" overlay={takeSnapshotClick}><button type="button" className="btn btn-md btn-success" style={takeSnapshotStyle}>Take a snapshot</button></OverlayTrigger>
                             <button type="button" className="btn btn-md btn-success" style={progressStyle} disabled>Taking a snapshot...</button>
                           </div>
-                          <div className="col-lg-12">&nbsp;</div> 
+                          <div className="col-lg-12">&nbsp;</div>
                             {snapshots}
                           </div>
                         </div>
@@ -327,10 +390,10 @@ const NodeStatus = CreateReactClass({
                       <Tab eventKey={6} title="Streams">
                           <Streams endpoint={this.props.endpointStatus.endpoint} clusterName={this.props.clusterName}/>
                       </Tab>
-                    </Tabs>               
+                    </Tabs>
                     </div>
                     </div>
-                  
+                  }
                 </Modal.Body>
                 <Modal.Footer>
                   <Button onClick={this.close}>Close</Button>

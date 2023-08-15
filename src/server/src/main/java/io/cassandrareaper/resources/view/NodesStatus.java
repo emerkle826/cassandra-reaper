@@ -43,6 +43,7 @@ public final class NodesStatus {
   private static final List<Pattern> ENDPOINT_SEVERITY_PATTERNS = Lists.newArrayList();
   private static final List<Pattern> ENDPOINT_HOSTID_PATTERNS = Lists.newArrayList();
   private static final List<Pattern> ENDPOINT_TOKENS_PATTERNS = Lists.newArrayList();
+  private static final List<Pattern> ENDPOINT_TYPE_PATTERNS = Lists.newArrayList();
 
   private static final Pattern ENDPOINT_NAME_PATTERN_IP4
       = Pattern.compile("^([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3})", Pattern.MULTILINE | Pattern.DOTALL);
@@ -50,20 +51,22 @@ public final class NodesStatus {
           = Pattern.compile("^([0-9:a-fA-F\\]\\[]{3,41})", Pattern.MULTILINE | Pattern.DOTALL);
   private static final Pattern ENDPOINT_STATUS_22_PATTERN = Pattern.compile("(STATUS):([0-9]*):(\\w+)");
   private static final Pattern ENDPOINT_STATUS_40_PATTERN = Pattern.compile("(STATUS_WITH_PORT):([0-9]*):(\\w+)");
-  private static final Pattern ENDPOINT_DC_22_PATTERN = Pattern.compile("(DC):([0-9]*):([0-9a-zA-Z-\\.]+)");
-  private static final Pattern ENDPOINT_RACK_22_PATTERN = Pattern.compile("(RACK):([0-9]*):([0-9a-zA-Z-\\.]+)");
+  private static final Pattern ENDPOINT_DC_22_PATTERN = Pattern.compile("(DC):([0-9]*):([0-9a-zA-Z-_\\.]+)");
+  private static final Pattern ENDPOINT_RACK_22_PATTERN = Pattern.compile("(RACK):([0-9]*):([0-9a-zA-Z-_\\.]+)");
   private static final Pattern ENDPOINT_LOAD_22_PATTERN = Pattern.compile("(LOAD):([0-9]*):([0-9eE.]+)");
   private static final Pattern ENDPOINT_RELEASE_22_PATTERN = Pattern.compile("(RELEASE_VERSION):([0-9]*):([0-9.]+)");
   private static final Pattern ENDPOINT_SEVERITY_22_PATTERN = Pattern.compile("(SEVERITY):([0-9]*):([0-9.]+)");
   private static final Pattern ENDPOINT_HOSTID_22_PATTERN = Pattern.compile("(HOST_ID):([0-9]*):([0-9a-z-]+)");
   private static final Pattern ENDPOINT_TOKENS_22_PATTERN = Pattern.compile("(TOKENS):([0-9]*)");
   private static final Pattern ENDPOINT_STATUS_21_PATTERN = Pattern.compile("(STATUS)(:)(\\w+)");
-  private static final Pattern ENDPOINT_DC_21_PATTERN = Pattern.compile("(DC)(:)([0-9a-zA-Z-\\.]+)");
-  private static final Pattern ENDPOINT_RACK_21_PATTERN = Pattern.compile("(RACK)(:)([0-9a-zA-Z-\\.]+)");
+  private static final Pattern ENDPOINT_DC_21_PATTERN = Pattern.compile("(DC)(:)([0-9a-zA-Z-_\\.]+)");
+  private static final Pattern ENDPOINT_RACK_21_PATTERN = Pattern.compile("(RACK)(:)([0-9a-zA-Z-_\\.]+)");
   private static final Pattern ENDPOINT_LOAD_21_PATTERN = Pattern.compile("(LOAD)(:)([0-9eE.]+)");
   private static final Pattern ENDPOINT_RELEASE_21_PATTERN = Pattern.compile("(RELEASE_VERSION)(:)([0-9.]+)");
   private static final Pattern ENDPOINT_SEVERITY_21_PATTERN = Pattern.compile("(SEVERITY)(:)([0-9.]+)");
   private static final Pattern ENDPOINT_HOSTID_21_PATTERN = Pattern.compile("(HOST_ID)(:)([0-9a-z-]+)");
+  private static final Pattern ENDPOINT_LOAD_SCYLLA_44_PATTERN = Pattern.compile("(LOAD)(:)([0-9eE.\\+]+)");
+  private static final Pattern ENDPOINT_TYPE_STARGATE_PATTERN = Pattern.compile("(X10):([0-9]*):(stargate)");
 
   private static final String NOT_AVAILABLE = "Not available";
 
@@ -114,7 +117,10 @@ public final class NodesStatus {
     // Cleanup hostnames from simpleStates keys
     Map<String, String> simpleStatesCopy = new HashMap<>();
     for (Map.Entry<String, String> entry: simpleStates.entrySet()) {
-      String entryKey = entry.getKey().substring(entry.getKey().indexOf('/'));
+      String entryKey = "/" + entry.getKey();
+      if (entry.getKey().indexOf('/') != -1) {
+        entryKey = entry.getKey().substring(entry.getKey().indexOf('/'));
+      }
       simpleStatesCopy.put(entryKey, entry.getValue());
     }
     simpleStates = simpleStatesCopy;
@@ -142,6 +148,7 @@ public final class NodesStatus {
       Optional<String> tokens = parseEndpointState(ENDPOINT_TOKENS_PATTERNS, endpointString, 2, String.class);
       Optional<Double> load = parseEndpointState(ENDPOINT_LOAD_PATTERNS, endpointString, 3, Double.class);
       totalLoad += load.orElse(0.0);
+      Optional<String> stargate = parseEndpointState(ENDPOINT_TYPE_PATTERNS, endpointString, 3, String.class);
 
       EndpointState endpointState = new EndpointState(
           endpoint.orElse(NOT_AVAILABLE),
@@ -152,7 +159,8 @@ public final class NodesStatus {
           severity.orElse(0.0),
           releaseVersion.orElse(NOT_AVAILABLE),
           tokens.orElse(NOT_AVAILABLE),
-          load.orElse(0.0));
+          load.orElse(0.0),
+          stargate.isPresent() ? NodeType.STARGATE : NodeType.CASSANDRA);
 
       if (!status.orElse(NOT_AVAILABLE).toLowerCase().contains("left")
           && !status.orElse(NOT_AVAILABLE).toLowerCase().contains("removed")) {
@@ -197,11 +205,13 @@ public final class NodesStatus {
         Arrays.asList(ENDPOINT_STATUS_40_PATTERN, ENDPOINT_STATUS_22_PATTERN, ENDPOINT_STATUS_21_PATTERN));
     ENDPOINT_DC_PATTERNS.addAll(Arrays.asList(ENDPOINT_DC_22_PATTERN, ENDPOINT_DC_21_PATTERN));
     ENDPOINT_RACK_PATTERNS.addAll(Arrays.asList(ENDPOINT_RACK_22_PATTERN, ENDPOINT_RACK_21_PATTERN));
-    ENDPOINT_LOAD_PATTERNS.addAll(Arrays.asList(ENDPOINT_LOAD_22_PATTERN, ENDPOINT_LOAD_21_PATTERN));
+    ENDPOINT_LOAD_PATTERNS.addAll(Arrays.asList(ENDPOINT_LOAD_22_PATTERN, ENDPOINT_LOAD_SCYLLA_44_PATTERN,
+            ENDPOINT_LOAD_21_PATTERN));
     ENDPOINT_RELEASE_PATTERNS.addAll(Arrays.asList(ENDPOINT_RELEASE_22_PATTERN, ENDPOINT_RELEASE_21_PATTERN));
     ENDPOINT_SEVERITY_PATTERNS.addAll(Arrays.asList(ENDPOINT_SEVERITY_22_PATTERN, ENDPOINT_SEVERITY_21_PATTERN));
     ENDPOINT_HOSTID_PATTERNS.addAll(Arrays.asList(ENDPOINT_HOSTID_22_PATTERN, ENDPOINT_HOSTID_21_PATTERN));
     ENDPOINT_TOKENS_PATTERNS.add(ENDPOINT_TOKENS_22_PATTERN);
+    ENDPOINT_TYPE_PATTERNS.add(ENDPOINT_TYPE_STARGATE_PATTERN);
   }
 
   public static final class GossipInfo {
@@ -229,6 +239,11 @@ public final class NodesStatus {
       this.totalLoad = totalLoad;
       this.endpointNames = endpointNames;
     }
+  }
+
+  public enum NodeType {
+    CASSANDRA,
+    STARGATE;
   }
 
   public static final class EndpointState {
@@ -260,6 +275,9 @@ public final class NodesStatus {
     @JsonProperty
     public final Double load;
 
+    @JsonProperty
+    public final NodeType type;
+
     public EndpointState(
         String endpoint,
         String hostId,
@@ -269,7 +287,8 @@ public final class NodesStatus {
         Double severity,
         String releaseVersion,
         String tokens,
-        Double load) {
+        Double load,
+        NodeType type) {
 
       this.endpoint = endpoint;
       this.hostId = hostId;
@@ -280,6 +299,7 @@ public final class NodesStatus {
       this.releaseVersion = releaseVersion;
       this.tokens = tokens;
       this.load = load;
+      this.type = type;
     }
 
     public String getDc() {
@@ -317,7 +337,10 @@ public final class NodesStatus {
           + hostId
           + " / "
           + "Tokens : "
-          + tokens;
+          + tokens
+          + " / "
+          + "Type : "
+          + type;
     }
   }
 }

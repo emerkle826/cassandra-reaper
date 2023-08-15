@@ -21,7 +21,7 @@ import io.cassandrareaper.AppContext;
 import io.cassandrareaper.ReaperException;
 import io.cassandrareaper.core.Node;
 import io.cassandrareaper.core.StreamSession;
-import io.cassandrareaper.jmx.ClusterFacade;
+import io.cassandrareaper.management.ClusterFacade;
 import io.cassandrareaper.service.CompactionService;
 import io.cassandrareaper.service.MetricsService;
 import io.cassandrareaper.service.StreamService;
@@ -74,7 +74,7 @@ public final class NodeStatsResource {
 
     try {
       Node node = Node.builder()
-              .withCluster(context.storage.getCluster(clusterName))
+              .withCluster(context.storage.getClusterDao().getCluster(clusterName))
               .withHostname(host)
               .build();
 
@@ -99,7 +99,7 @@ public final class NodeStatsResource {
 
     try {
       Node node = Node.builder()
-              .withCluster(context.storage.getCluster(clusterName))
+              .withCluster(context.storage.getClusterDao().getCluster(clusterName))
               .withHostname(host)
               .build();
 
@@ -124,7 +124,7 @@ public final class NodeStatsResource {
 
     try {
       Node node = Node.builder()
-              .withCluster(context.storage.getCluster(clusterName))
+              .withCluster(context.storage.getClusterDao().getCluster(clusterName))
               .withHostname(host)
               .build();
 
@@ -148,7 +148,7 @@ public final class NodeStatsResource {
 
     try {
       Node node = Node.builder()
-              .withCluster(context.storage.getCluster(clusterName))
+              .withCluster(context.storage.getClusterDao().getCluster(clusterName))
               .withHostname(host)
               .build();
 
@@ -174,7 +174,7 @@ public final class NodeStatsResource {
 
     try {
       Node node = Node.builder()
-              .withCluster(context.storage.getCluster(clusterName))
+              .withCluster(context.storage.getClusterDao().getCluster(clusterName))
               .withHostname(host)
               .build();
 
@@ -201,7 +201,7 @@ public final class NodeStatsResource {
       Preconditions.checkState(clusterName != null && !clusterName.isEmpty(), "Cluster name must be set");
 
       Map<String, List<String>> tokens
-          = ClusterFacade.create(context).getTokensByNode(context.storage.getCluster(clusterName));
+          = ClusterFacade.create(context).getTokensByNode(context.storage.getClusterDao().getCluster(clusterName));
 
       return Response.ok().entity(tokens.get(host)).build();
     } catch (RuntimeException | ReaperException e) {

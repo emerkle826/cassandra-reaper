@@ -22,6 +22,7 @@ import io.cassandrareaper.ReaperException;
 import io.cassandrareaper.core.Node;
 import io.cassandrareaper.core.Snapshot;
 import io.cassandrareaper.service.SnapshotService;
+import io.cassandrareaper.storage.snapshot.ISnapshotDao;
 
 import java.util.List;
 import java.util.Map;
@@ -53,11 +54,12 @@ public final class SnapshotResource {
   private final SnapshotService snapshotManager;
   private final AppContext context;
 
-  public SnapshotResource(AppContext context, Environment environment) {
+  public SnapshotResource(AppContext context, Environment environment, ISnapshotDao snapshotDao) {
     this.context = context;
     snapshotManager = SnapshotService.create(
         context,
-        environment.lifecycle().executorService("SnapshotService").minThreads(5).maxThreads(5).build());
+        environment.lifecycle().executorService("SnapshotService").minThreads(5).maxThreads(5).build(),
+        snapshotDao);
   }
 
   /**
@@ -66,7 +68,7 @@ public final class SnapshotResource {
    * @return nothing in case everything is ok, and a status code 500 in case of errors.
    */
   @POST
-  @Path("/{clusterName}/{host}")
+  @Path("/cluster/{clusterName}/{host}")
   public Response createSnapshot(
       @Context UriInfo uriInfo,
       @PathParam("clusterName") String clusterName,
@@ -77,7 +79,7 @@ public final class SnapshotResource {
 
     try {
       Node node = Node.builder()
-              .withCluster(context.storage.getCluster(clusterName))
+              .withCluster(context.storage.getClusterDao().getCluster(clusterName))
               .withHostname(host.get())
               .build();
 
@@ -115,34 +117,30 @@ public final class SnapshotResource {
   @Path("/cluster/{clusterName}")
   public Response createSnapshotClusterWide(
       @Context UriInfo uriInfo,
-      @PathParam("clusterName") Optional<String> clusterName,
+      @PathParam("clusterName") String clusterName,
       @QueryParam("keyspace") Optional<String> keyspace,
       @QueryParam("snapshot_name") Optional<String> snapshotName,
       @QueryParam("owner") Optional<String> owner,
       @QueryParam("cause") Optional<String> cause) {
 
     try {
-      if (clusterName.isPresent()) {
-        if (keyspace.isPresent() && !keyspace.get().isEmpty()) {
-          snapshotManager.takeSnapshotClusterWide(
-              snapshotManager.formatSnapshotName(snapshotName.or(SnapshotService.SNAPSHOT_PREFIX)),
-              clusterName.get(),
-              owner.or("reaper"),
-              cause.or("Snapshot taken with Reaper"),
-              keyspace.get());
-        } else {
-          snapshotManager.takeSnapshotClusterWide(
-              snapshotManager.formatSnapshotName(snapshotName.or(SnapshotService.SNAPSHOT_PREFIX)),
-              clusterName.get(),
-              owner.or("reaper"),
-              cause.or("Snapshot taken with Reaper"));
-        }
-        return Response.ok()
-            .location(uriInfo.getBaseUriBuilder().path("snapshot").path(clusterName.get()).build())
-            .build();
+      if (keyspace.isPresent() && !keyspace.get().isEmpty()) {
+        snapshotManager.takeSnapshotClusterWide(
+            snapshotManager.formatSnapshotName(snapshotName.or(SnapshotService.SNAPSHOT_PREFIX)),
+            clusterName,
+            owner.or("reaper"),
+            cause.or("Snapshot taken with Reaper"),
+            keyspace.get());
       } else {
-        return Response.status(Status.BAD_REQUEST).entity("No cluster was specified for taking the snapshot.").build();
+        snapshotManager.takeSnapshotClusterWide(
+            snapshotManager.formatSnapshotName(snapshotName.or(SnapshotService.SNAPSHOT_PREFIX)),
+            clusterName,
+            owner.or("reaper"),
+            cause.or("Snapshot taken with Reaper"));
       }
+      return Response.ok()
+          .location(uriInfo.getBaseUriBuilder().path("snapshot").path(clusterName).build())
+          .build();
     } catch (ReaperException e) {
       LOG.error(e.getMessage(), e);
       return Response.serverError().entity(e.getMessage()).build();
@@ -150,12 +148,12 @@ public final class SnapshotResource {
   }
 
   @GET
-  @Path("/{clusterName}/{host}")
+  @Path("/cluster/{clusterName}/{host}")
   public Response listSnapshots(@PathParam("clusterName") String clusterName, @PathParam("host") String host) {
     try {
       Map<String, List<Snapshot>> snapshots = snapshotManager.listSnapshotsGroupedByName(
               Node.builder()
-                  .withCluster(context.storage.getCluster(clusterName))
+                  .withCluster(context.storage.getClusterDao().getCluster(clusterName))
                   .withHostname(host)
                   .build());
 
@@ -189,7 +187,7 @@ public final class SnapshotResource {
    * @return nothing in case everything is ok, and a status code 500 in case of errors.
    */
   @DELETE
-  @Path("/{clusterName}/{host}/{snapshotName}")
+  @Path("/cluster/{clusterName}/{host}/{snapshotName}")
   public Response clearSnapshot(
       @Context UriInfo uriInfo,
       @PathParam("clusterName") String clusterName,
@@ -199,7 +197,7 @@ public final class SnapshotResource {
     try {
       if (host.isPresent() && snapshotName.isPresent()) {
         Node node = Node.builder()
-                .withCluster(context.storage.getCluster(clusterName))
+                .withCluster(context.storage.getClusterDao().getCluster(clusterName))
                 .withHostname(host.get())
                 .build();
 

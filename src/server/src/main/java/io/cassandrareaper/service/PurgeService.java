@@ -22,6 +22,7 @@ import io.cassandrareaper.ReaperException;
 import io.cassandrareaper.core.Cluster;
 import io.cassandrareaper.core.RepairRun;
 import io.cassandrareaper.storage.IDistributedStorage;
+import io.cassandrareaper.storage.repairrun.IRepairRunDao;
 
 import java.util.Collection;
 import java.util.List;
@@ -42,12 +43,15 @@ public final class PurgeService {
 
   private final AppContext context;
 
-  private PurgeService(AppContext context) {
+  private final IRepairRunDao repairRunDao;
+
+  private PurgeService(AppContext context, IRepairRunDao repairRunDao) {
     this.context = context;
+    this.repairRunDao = repairRunDao;
   }
 
-  public static PurgeService create(AppContext context) {
-    return new PurgeService(context);
+  public static PurgeService create(AppContext context, IRepairRunDao repairRunDao) {
+    return new PurgeService(context, repairRunDao);
   }
 
   public Integer purgeDatabase() throws ReaperException {
@@ -55,13 +59,13 @@ public final class PurgeService {
     if (context.config.getNumberOfRunsToKeepPerUnit() != 0
         || context.config.getPurgeRecordsAfterInDays() != 0) {
       // List clusters
-      Collection<Cluster> clusters = context.storage.getClusters();
+      Collection<Cluster> clusters = context.storage.getClusterDao().getClusters();
 
       // List repair runs
       for (Cluster cluster : clusters) {
 
         Collection<RepairRun> repairRuns
-            = context.storage.getRepairRunsForCluster(cluster.getName(), Optional.empty());
+            = repairRunDao.getRepairRunsForCluster(cluster.getName(), Optional.empty());
 
         if (context.config.getPurgeRecordsAfterInDays() > 0) {
           // Purge all runs that are older than threshold
@@ -88,17 +92,17 @@ public final class PurgeService {
   private int purgeRepairRunsByHistoryDepth(Collection<RepairRun> repairRuns) {
     int purgedRuns = 0;
     Map<UUID, List<RepairRun>> repairRunsByRepairUnit = repairRuns
-            .stream()
-            .filter(run -> run.getRunState().isTerminated()) // only delete terminated runs
-            .collect(Collectors.groupingBy(RepairRun::getRepairUnitId));
+        .stream()
+        .filter(run -> run.getRunState().isTerminated()) // only delete terminated runs
+        .collect(Collectors.groupingBy(RepairRun::getRepairUnitId));
     for (Entry<UUID, List<RepairRun>> repairUnit : repairRunsByRepairUnit.entrySet()) {
       List<RepairRun> repairRunsForUnit = repairUnit.getValue();
       repairRunsForUnit.sort(
           (RepairRun r1, RepairRun r2) -> r2.getEndTime().compareTo(r1.getEndTime()));
       for (int i = context.config.getNumberOfRunsToKeepPerUnit();
-          i < repairRunsForUnit.size();
-          i++) {
-        context.storage.deleteRepairRun(repairRunsForUnit.get(i).getId());
+           i < repairRunsForUnit.size();
+           i++) {
+        repairRunDao.deleteRepairRun(repairRunsForUnit.get(i).getId());
         purgedRuns++;
       }
     }
@@ -126,7 +130,7 @@ public final class PurgeService {
                                 context.config.getPurgeRecordsAfterInDays()))) // filter by date
         .forEach(
             run -> {
-              context.storage.deleteRepairRun(run.getId());
+              repairRunDao.deleteRepairRun(run.getId());
               purgedRuns.incrementAndGet();
             });
 
@@ -142,7 +146,7 @@ public final class PurgeService {
       IDistributedStorage storage = ((IDistributedStorage) context.storage);
       if (context.config.isInSidecarMode()) {
         storage.purgeMetrics();
-        storage.purgeNodeOperations();
+        storage.getOperationsDao().purgeNodeOperations();
       }
     }
   }
